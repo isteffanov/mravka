@@ -20,4 +20,6 @@ public interface StateTransition<LT extends LabelTransition<T>, T> {
     Stream<State> streamStates();
 
     Stream<TrailStep> streamTransitions();
+
+    void create(State state);
 }

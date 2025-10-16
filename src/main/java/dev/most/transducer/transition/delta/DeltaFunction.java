@@ -9,7 +9,6 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
-
 public class DeltaFunction implements TransitionFunction {
 
     private final StateTransition<LabelTransition<TransitionEnd>, TransitionEnd> delta;
@@ -18,11 +17,13 @@ public class DeltaFunction implements TransitionFunction {
         this.delta = delta;
     }
 
-    public static DeltaFunction create(TransitionStrategy stateStrategy, TransitionStrategy labelStrategy) {
+    public static DeltaFunction create(State startState, TransitionStrategy stateStrategy, TransitionStrategy labelStrategy) {
         StateTransition<LabelTransition<TransitionEnd>, TransitionEnd> delta = TransitionFunctionFactory.generate()
                  .stateTransitionVia(stateStrategy)
                  .labelTransitionVia(labelStrategy)
                  .compose();
+
+        delta.getOrCreate(startState);
 
         return new DeltaFunction(delta);
     }
@@ -52,17 +53,14 @@ public class DeltaFunction implements TransitionFunction {
 
     @Override
     public int findExistingPrefixLengthCovered(State from, String through) {
-        return (int) traverse(from, through).count() - 1;
+        return (int) traverse(from, through).count();
     }
 
     @Override
-    public State findLastStateInPrefixCovered(State from, String through) {
-        List<State> states = traverse(from, through).map(TrailStep::to).toList();
-        if (states.isEmpty()) {
-            return from;
-        }
-
-        return states.getLast();
+    public List<State> findPathThroughKey(State from, String through) {
+        return Stream.concat(
+                Stream.of(from),
+                traverse(from, through).map(TrailStep::to)).toList();
     }
 
     @Override
@@ -92,8 +90,10 @@ public class DeltaFunction implements TransitionFunction {
     }
 
     @Override
-    public void forEachStepInPathReversed(State from, String through, Consumer<TrailStep> consumer) {
-        traverse(from, through).toList()
+    public void forEachStepInPathReversedExcludingLast(State from, String through, int exclude, Consumer<TrailStep> consumer) {
+        traverse(from, through)
+                .skip(exclude)
+                .toList()
                 .reversed()
                 .forEach(consumer);
     }
@@ -147,5 +147,9 @@ public class DeltaFunction implements TransitionFunction {
                 .mapToLong(lt -> lt.streamLabels().count())
                 .max()
                 .orElse(0);
+    }
+
+    public void registerState(State state) {
+        delta.create(state);
     }
 }

@@ -36,7 +36,7 @@ public class MapBackedLabelTransition
     @Override
     public T getOrCreate(Character label) {
         if (!contents.containsKey(label)) {
-            return contents.put(label, nestedSupplier.get());
+            contents.put(label, nestedSupplier.get());
         }
 
         return contents.get(label);

@@ -2,6 +2,7 @@ package dev.most.transducer.transition.delta;
 
 import dev.most.transducer.transition.State;
 
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
@@ -15,7 +16,7 @@ public interface TransitionFunction {
 
     int findExistingPrefixLengthCovered(final State from, final String through);
 
-    State findLastStateInPrefixCovered(final State from, final String through);
+    List<State> findPathThroughKey(final State from, final String through);
 
     void prependOutput(State state, Character label, String prefix);
 
@@ -29,7 +30,7 @@ public interface TransitionFunction {
 
     void forEachLabel(State state, Consumer<Character> consumer);
 
-    void forEachStepInPathReversed(State from, String through, Consumer<TrailStep> consumer);
+    void forEachStepInPathReversedExcludingLast(State from, String through, int exclude, Consumer<TrailStep> consumer);
 
     void delete(State state);
 }

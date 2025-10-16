@@ -29,7 +29,7 @@ public class MapBackedStateTransition
     @Override
     public LabelTransition<T> getOrCreate(State state) {
         if (!contents.containsKey(state)) {
-            return contents.put(state, labelTransitionSupplier.get());
+            create(state);
         }
 
         return contents.get(state);
@@ -52,6 +52,11 @@ public class MapBackedStateTransition
 
     @Override
     public Stream<TrailStep> streamTransitions() {
-        return contents.
+        throw new UnsupportedOperationException("not implemented yet.");
+    }
+
+    @Override
+    public void create(State state) {
+        contents.put(state, labelTransitionSupplier.get());
     }
 }

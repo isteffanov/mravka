@@ -40,7 +40,7 @@ public class TransducerStructure implements TransducerMap {
     public static TransducerStructure createEmpty() {
         State startState = new State();
 
-        DeltaFunction transitionFunction = DeltaFunction.create(TransitionStrategy.HASH_MAP_STRATEGY, TransitionStrategy.HASH_MAP_STRATEGY);
+        DeltaFunction transitionFunction = DeltaFunction.create(startState, TransitionStrategy.HASH_MAP_STRATEGY, TransitionStrategy.HASH_MAP_STRATEGY);
         Map<StateSignature, State> cachedSignatures = new HashMap<>();
 
         String prefixOutput = "";
@@ -102,7 +102,7 @@ public class TransducerStructure implements TransducerMap {
     public boolean containsKey(Object key) {
         if (key instanceof String input) {
             return delta.findExistingPrefixLengthCovered(startState, input) == input.length()
-                    && delta.findLastStateInPrefixCovered(startState, input).isFinal();
+                    && delta.findPathThroughKey(startState, input).getLast().isFinal();
         }
 
         return false;
@@ -168,6 +168,7 @@ public class TransducerStructure implements TransducerMap {
     private void addInitial(String input, String output) {
         List<State> states = State.create(input.length());
         states.getLast().setFinal(true);
+        states.forEach(delta::registerState);
 
         delta.set(startState, input.charAt(0), states.getFirst(), "");
         for (int i = 0; i < input.length() - 1; ++i) {
@@ -189,7 +190,11 @@ public class TransducerStructure implements TransducerMap {
         List<State> newPath = buildNewPath(startState, input, existingInputPrefixLengthCovered);
 
         for (int i = existingInputPrefixLengthCovered; i < input.length(); ++i) {
-            delta.set(newPath.get(i), input.charAt(i), newPath.get(i+1), "");
+            delta.set(
+                    newPath.get(i),
+                    input.charAt(i),
+                    newPath.get(i + 1),
+                    "");
         }
 
         pushOutputForward(newPath, input, output, existingInputPrefixLengthCovered);
@@ -198,11 +203,11 @@ public class TransducerStructure implements TransducerMap {
     }
 
     private List<State> buildNewPath(State startState, String input, int existingInputPrefixLengthCovered) {
-        State lastState = delta.findLastStateInPrefixCovered(startState, input);
+        List<State> existingStates = delta.findPathThroughKey(startState, input);
         List<State> newStates = State.create(input.length() - existingInputPrefixLengthCovered);
 
         List<State> newPath = new ArrayList<>();
-        newPath.add(lastState);
+        newPath.addAll(existingStates);
         newPath.addAll(newStates);
 
         newStates.getLast().setFinal(true);
@@ -211,69 +216,67 @@ public class TransducerStructure implements TransducerMap {
     }
 
     private void pushOutputForward(List<State> path, String input, String output, int existingPathToInputLengthCovered) {
-        String c = commonPrefix(prefixOutput, output);
-        String l = remainderSuffix(c, prefixOutput);
-        String b = remainderSuffix(c, output);
+        OutputSplit outputSplit = new OutputSplit(output);
+        pushOutputForwardBySingleStep(outputSplit, prefixOutput, 0, path, input);
 
-        State firstStateInPath = path.getFirst();
-        delta.forEachLabel(firstStateInPath, label -> {
-            if (label == input.charAt(0)) {
-                return;
-            }
-
-            delta.prependOutput(firstStateInPath, label, l);
-        });
-        firstStateInPath.prependOutputIfFinal(l);
-
-
-        for (int i = 0; i < existingPathToInputLengthCovered; ++i) {
-
-
+        int pushingLimit = Math.min(existingPathToInputLengthCovered, input.length());
+        for (int i = 1; i <= pushingLimit; ++i) {
             String outputOnCurrentStep = delta.getOutput(path.get(i), input.charAt(i));
-            c = commonPrefix(l + outputOnCurrentStep, b);
-            l = remainderSuffix(c, l + outputOnCurrentStep);
-            b = remainderSuffix(c, b);
 
-            if (i + 1 >= path.size()) {
-                break;
-            }
+            outputSplit = new OutputSplit(outputSplit, outputOnCurrentStep);
+            pushOutputForwardBySingleStep(outputSplit, outputOnCurrentStep, i, path, input);
 
-            String finalL2 = l;
-            delta.forEachLabel(path.get(i + 1), label -> {
-                if (label == input.charAt(i + 1)) {
-                    return;
-                }
-
-                delta.prependOutput(path.get(i + 1), label, finalL2);
-            });
-            path.get(i + 1).prependOutputIfFinal(l);
-
-            delta.setOutput(path.get(i), input.charAt(i), c);
+            delta.setOutput(path.get(i - 1), input.charAt(i - 1), outputSplit.c());
         }
 
         if (input.length() > existingPathToInputLengthCovered) {
-            delta.setOutput(path.get(existingPathToInputLengthCovered), input.charAt(existingPathToInputLengthCovered), b);
-            for (int i = existingPathToInputLengthCovered + 1; i < input.length(); ++i) {
-                delta.clearOutput(path.get(i), input.charAt(i));
-            }
-
-            path.getLast().clearOutputIfFinal();
+            pullRemainingOutputEarliest(path, input, existingPathToInputLengthCovered, outputSplit);
         }
         else {
-            State lastStateInPath = path.getLast();
-
-            lastStateInPath.setOutputIfFinal(b);
-            String finalL1 = l;
-            delta.forEachLabel(lastStateInPath, label -> {
-                delta.prependOutput(lastStateInPath, label, finalL1);
-            });
+            pullRemainingOutput(path, outputSplit);
         }
     }
 
-    private void reduceMinimumExceptForTo(int existingLengthCovered) {
-        List<TrailStep> transitionsReversed = delta.traverseFullyReversed(startState, minimumExceptFor, existingLengthCovered);
+    private void pushOutputForwardBySingleStep(
+            OutputSplit split,
+            String outputOnCurrentStep,
+            int step,
+            List<State> path,
+            String input) {
 
-        transitionsReversed.forEach(trailStep -> {
+        OutputSplit newSplit = new OutputSplit(split, outputOnCurrentStep);
+
+        State state = path.get(step);
+        delta.forEachLabel(state, label -> {
+            if (label == input.charAt(step)) {
+                return;
+            }
+
+            delta.prependOutput(state, label, newSplit.l());
+        });
+
+        state.prependOutputIfFinal(newSplit.l());
+    }
+
+    private void pullRemainingOutputEarliest(List<State> path, String input, int existingPathToInputLengthCovered, OutputSplit outputSplit) {
+        delta.setOutput(path.get(existingPathToInputLengthCovered), input.charAt(existingPathToInputLengthCovered), outputSplit.b());
+        for (int i = existingPathToInputLengthCovered + 1; i < input.length(); ++i) {
+            delta.clearOutput(path.get(i), input.charAt(i));
+        }
+
+        path.getLast().clearOutputIfFinal();
+    }
+
+    private void pullRemainingOutput(List<State> path, OutputSplit outputSplit) {
+        State lastStateInPath = path.getLast();
+
+        lastStateInPath.setOutputIfFinal(outputSplit.b());
+        delta.forEachLabel(lastStateInPath,
+                label -> delta.prependOutput(lastStateInPath, label, outputSplit.l()));
+    }
+
+    private void reduceMinimumExceptForTo(int existingLengthCovered) {
+        delta.forEachStepInPathReversedExcludingLast(startState, minimumExceptFor, existingLengthCovered, trailStep -> {
             State state = trailStep.to();
 
             State prev = trailStep.from();
@@ -305,9 +308,8 @@ public class TransducerStructure implements TransducerMap {
 
         MerkleTree.Builder<StateOutgoingMeta> outgoingBuilder = new MerkleTree.Builder<>();
 
-        delta.forEachLabel(state, label -> {
-            outgoingBuilder.add(new StateOutgoingMeta(label, delta.getDestination(state, label), delta.getOutput(state, label)));
-        });
+        delta.forEachLabel(state,
+                label -> outgoingBuilder.add(new StateOutgoingMeta(label, delta.getDestination(state, label), delta.getOutput(state, label))));
 
         String outgoing = outgoingBuilder.build().value;
 
@@ -328,8 +330,8 @@ public class TransducerStructure implements TransducerMap {
 
     private record OutputSplit(String c, String l, String b) {
 
-        public OutputSplit() {
-            this("", "", "");
+        public OutputSplit(String output) {
+            this("", "", output);
         }
 
         public OutputSplit(OutputSplit other, String outputOnCurrentStep) {

@@ -22,7 +22,7 @@ public class TransducerStructureStaticTest {
         Dictionary dictionary = Dictionary.of(TransducerEntry.of("key", "value"));
         TransducerStructure map = TransducerStructure.createFromOrderedDictionary(dictionary);
 
-        assertTrue(map.isLinear());
+        assertEquals(1, map.getDegreeOfSpread());
         assertEquals("value", map.getPrefixOutput());
         assertEquals(4, map.getNumberOfStates());
     }
