@@ -6,7 +6,6 @@ import dev.most.transducer.TransducerStructure;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 public class TransducerStructureStaticTest {
 
@@ -34,6 +33,7 @@ public class TransducerStructureStaticTest {
                 TransducerEntry.of("key2", "value2"));
         TransducerStructure map = TransducerStructure.createFromOrderedDictionary(dictionary);
 
+        assertEquals(2, map.getDegreeOfSpread());
         assertEquals("value", map.getPrefixOutput());
         assertEquals(5, map.getNumberOfStates());
     }
