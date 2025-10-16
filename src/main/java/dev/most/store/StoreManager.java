@@ -1,6 +1,6 @@
 package dev.most.store;
 
-import dev.most.common.Result;
+import dev.most.common.result.Result;
 import dev.most.store.operations.IntegerOperations;
 import dev.most.store.operations.ListOperations;
 import dev.most.store.values.IntegerValue;

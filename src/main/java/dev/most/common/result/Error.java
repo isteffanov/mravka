@@ -1,6 +1,5 @@
-package dev.most.common;
+package dev.most.common.result;
 
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -8,89 +7,95 @@ import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
-class Ok<T> implements Result<T> {
+class Error<T> implements Result<T> {
 
-    private final T value;
+    private final Throwable throwable;
 
-    Ok(final T value) {
-        this.value = value;
+    Error(final Throwable throwable) {
+        this.throwable = throwable;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <E extends Throwable> T propagate(final Throwable throwable) throws E {
+        throw (E) throwable;
     }
 
     @Override
     public boolean isOk() {
-        return true;
-    }
-
-    @Override
-    public void ifOk(final Consumer<T> consumer) {
-        requireNonNull(consumer, "The value consumer cannot be null");
-        consumer.accept(value);
-    }
-
-    @Override
-    public boolean isError() {
         return false;
     }
 
     @Override
+    public void ifOk(final Consumer<T> consumer) {
+        // Do nothing when trying to consume the value of an Error result.
+    }
+
+    @Override
+    public boolean isError() {
+        return true;
+    }
+
+    @Override
     public void ifError(final Consumer<Throwable> consumer) {
-        // Do nothing when trying to consume the error of an Ok result.
+        requireNonNull(consumer, "The error consumer cannot be null");
+        consumer.accept(throwable);
     }
 
     @Override
     public Result<T> switchIfError(final Function<Throwable, Result<T>> fallbackMethod) {
-        return new Ok<>(value);
+        requireNonNull(fallbackMethod, "The fallback method cannot be null");
+        return fallbackMethod.apply(throwable);
     }
 
     @Override
     public <U> Result<U> map(final Function<? super T, ? extends U> mapper) {
-        requireNonNull(mapper, "The value mapper cannot be null");
-        return new Ok<>(mapper.apply(value));
+        return new Error<>(throwable);
     }
 
     @Override
     public <U> Result<U> flatMap(final Function<? super T, Result<U>> mapper) {
-        requireNonNull(mapper, "The value flat-mapper cannot be null");
-        return mapper.apply(value);
+        return new Error<>(throwable);
     }
 
     @Override
     public Result<T> mapError(final Function<Throwable, ? extends Throwable> mapper) {
-        return new Ok<>(value);
+        requireNonNull(mapper, "The error mapper cannot be null");
+        return new Error<>(mapper.apply(throwable));
     }
 
     @Override
     public T get() {
-        return value;
+        return propagate(throwable);
     }
 
     @Override
     public T getOrElse(final Supplier<T> supplier) {
-        return value;
+        requireNonNull(supplier);
+        return supplier.get();
     }
 
     @Override
     public Throwable getError() {
-        throw new NoSuchElementException("Result contains a value: " + value.toString());
+        return throwable;
     }
 
     @Override
     public boolean equals(final Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        final Ok<?> ok = (Ok<?>) o;
-        return Objects.equals(value, ok.value);
+        final Error<?> error = (Error<?>) o;
+        return Objects.equals(throwable, error.throwable);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(value);
+        return Objects.hash(throwable);
     }
 
     @Override
     public String toString() {
-        return "Ok{" +
-                "value=" + value +
+        return "Error{" +
+                "throwable=" + throwable +
                 '}';
     }
 }
