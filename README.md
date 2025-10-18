@@ -36,6 +36,6 @@
 --- 
 ### Lifecycle and CI/CD
  * ~~checkstyle~~
- * testing coverage
+ * ~~testing coverage~~
  * formal verification
  * running test and verify on merge/push
